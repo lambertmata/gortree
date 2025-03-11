@@ -1,7 +1,9 @@
 package rtree_test
 
 import (
+	"log/slog"
 	"ralbero"
+	"strconv"
 	"testing"
 )
 
@@ -10,11 +12,17 @@ type Location struct {
 	Coordinates [2]float64
 }
 
-func (l *Location) Bounds() [4]float64 {
+func (l *Location) ID() string {
+	return l.Name
+}
+
+func (l *Location) BoundingBox() rtree.Rect {
 	x := l.Coordinates[0]
 	y := l.Coordinates[1]
 
-	return [4]float64{x, y, x, y}
+	rect := rtree.NewRect(x, y, x, y)
+
+	return *rect
 }
 
 var cityLocations = []Location{
@@ -128,6 +136,10 @@ func TestRTree_Query(t *testing.T) {
 	for _, testCase := range testCases {
 		foundEntries := rt.Query(testCase.Rect)
 		if len(foundEntries) != testCase.Expected {
+			for i, entry := range foundEntries {
+				slog.Info("found", strconv.Itoa(i), entry.ID())
+			}
+
 			t.Errorf("Expected %d entries in %s, got %d", testCase.Expected, testCase.Name, len(foundEntries))
 		}
 	}

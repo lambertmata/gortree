@@ -7,15 +7,8 @@ import (
 )
 
 type GeoReferenced interface {
-	Bounds() [4]float64
-}
-
-type Node struct {
-	MBR     Rect
-	IsLeaf  bool
-	Entries []*Node
-	Parent  *Node
-	Data    GeoReferenced
+	BoundingBox() Rect
+	ID() string
 }
 
 type RTree struct {
@@ -24,8 +17,10 @@ type RTree struct {
 	minEntries int
 }
 
-const MinEntries = 2
-const MaxEntries = 4
+const (
+	MinEntries = 2
+	MaxEntries = 4
+)
 
 func NewRTree() *RTree {
 	return &RTree{
@@ -69,32 +64,32 @@ func (t *RTree) Max() int {
 }
 
 // chooseLeaf selects the best node for inserting a new entry.
-func (t *RTree) chooseLeaf(node *Node, entry *Node) *Node {
+func (t *RTree) chooseLeaf(node *Node, entry *Entry) *Node {
 
 	// The tree is descended until a leaf is reached, by selecting the child node which requires the least enlargement
 	// to contain rect.
 	// If a tie occurs, meaning two child have the same enlargement, the node with the smallest area is selected.
-	if node.Data != nil {
+	if node.IsLeaf {
 		return node
 	}
 
 	var bestNode *Node
 	minEnlargement := math.MaxFloat64
 
-	for _, child := range node.Entries {
+	for _, child := range node.Children {
 
-		if child.Data != nil {
+		if node.IsLeaf {
 			continue
 		}
 
-		enlargement := child.MBR.Enlargement(entry.MBR)
+		enlargement := child.BoundingBox.Enlargement(entry.BoundingBox)
 
 		if enlargement < minEnlargement {
 
 			minEnlargement = enlargement
 			bestNode = child
 
-		} else if enlargement == minEnlargement && bestNode != nil && (child.MBR.Area() < bestNode.MBR.Area()) {
+		} else if enlargement == minEnlargement && bestNode != nil && (child.BoundingBox.Area() < bestNode.BoundingBox.Area()) {
 			bestNode = child
 		}
 	}
@@ -107,15 +102,19 @@ func (t *RTree) chooseLeaf(node *Node, entry *Node) *Node {
 	return t.chooseLeaf(bestNode, entry)
 }
 
-// updateMBR Using current entries MBRs it updated the node MBR.
-func (t *RTree) updateMBR(node *Node) {
-	node.MBR = computeMBR(node.Entries)
+// updateNodeMBR Using current entries MBRs it updated the node BoundingBox.
+func (t *RTree) updateNodeMBR(node *Node) {
+	if node.IsLeaf {
+		node.BoundingBox = computeEntriesMBR(node.Entries)
+	} else {
+		node.BoundingBox = computeNodesMBR(node.Children)
+	}
 }
 
 // updateMBRsUpward updates MBRs starting from node up to the root.
 func (t *RTree) updateMBRsUpward(node *Node) {
 	for node != nil {
-		t.updateMBR(node)
+		t.updateNodeMBR(node)
 		node = node.Parent
 	}
 }
@@ -134,8 +133,8 @@ func (t *RTree) adjustTree(node *Node, splitNode *Node) {
 
 		// Create a new root
 		newRoot := &Node{
-			IsLeaf:  false,
-			Entries: []*Node{node, splitNode},
+			IsLeaf:   false,
+			Children: []*Node{node, splitNode},
 		}
 
 		// Update parent references
@@ -145,8 +144,8 @@ func (t *RTree) adjustTree(node *Node, splitNode *Node) {
 		// Update tree's root
 		t.root = newRoot
 
-		// Update the MBR of the new root
-		newRoot.MBR = computeMBR(newRoot.Entries)
+		// Update the BoundingBox of the new root
+		newRoot.BoundingBox = computeNodesMBR(newRoot.Children)
 
 		return
 	}
@@ -156,11 +155,11 @@ func (t *RTree) adjustTree(node *Node, splitNode *Node) {
 	// We need to add the new node to the parent and continue adjusting upward
 	parent := node.Parent
 
-	// Update the MBR of the original node
-	node.MBR = computeMBR(node.Entries)
+	// Update the BoundingBox of the original node
+	node.BoundingBox = computeNodesMBR(node.Children)
 
 	// Add splitNode to parent
-	parent.Entries = append(parent.Entries, splitNode)
+	parent.Children = append(parent.Children, splitNode)
 	splitNode.Parent = parent
 
 	// Check if parent needs splitting
@@ -169,19 +168,6 @@ func (t *RTree) adjustTree(node *Node, splitNode *Node) {
 	// Continue adjusting up the tree
 	t.adjustTree(parent, parentSplit)
 
-}
-
-// NewEntry creates an entry Node with data.
-func NewEntry(data GeoReferenced) *Node {
-	bounds := data.Bounds()
-
-	newEntry := &Node{
-		Data:   data,
-		MBR:    Rect{bounds[0], bounds[1], bounds[2], bounds[3]},
-		IsLeaf: true,
-	}
-
-	return newEntry
 }
 
 // Insert adds a new item to the tree.
@@ -197,9 +183,6 @@ func (t *RTree) Insert(data GeoReferenced) {
 	leaf.Entries = append(leaf.Entries, newEntry)
 	newEntry.Parent = leaf
 
-	// Since the leaf now contains data nodes as children, it should be marked as an internal node
-	leaf.IsLeaf = false
-
 	// Split if the leaf overflows
 	splitNode := t.splitNodeIfNeeded(leaf)
 
@@ -209,16 +192,16 @@ func (t *RTree) Insert(data GeoReferenced) {
 }
 
 // pickSeeds gives the two entries that are the farthest apart
-func (t *RTree) pickSeeds(nodeA *Node) [2]*Node {
+func (t *RTree) pickSeeds(nodeA *Node) [2]*Entry {
 
-	seeds := [2]*Node{}
+	seeds := [2]*Entry{}
 
 	var maxEnlargement float64
 
 	// Pick the entries that (would waste the more area if put together).
 	for i := 0; i < len(nodeA.Entries); i++ {
 		for j := 0; j < len(nodeA.Entries); j++ {
-			enlargement := nodeA.Entries[i].MBR.Enlargement(nodeA.Entries[j].MBR)
+			enlargement := nodeA.Entries[i].BoundingBox.Enlargement(nodeA.Entries[j].BoundingBox)
 			if enlargement > maxEnlargement {
 				maxEnlargement = enlargement
 				seeds[0] = nodeA.Entries[i]
@@ -230,20 +213,19 @@ func (t *RTree) pickSeeds(nodeA *Node) [2]*Node {
 	return seeds
 }
 
-func computeMBR(entries []*Node) Rect {
-
+func computeEntriesMBR(entries []*Entry) Rect {
 	var mbr Rect
-
-	if len(entries) == 0 {
-		return mbr
+	for i := 0; i < len(entries); i++ {
+		mbr.Expand(entries[i].BoundingBox)
 	}
+	return mbr
+}
 
-	mbr = entries[0].MBR
-
-	for i := 1; i < len(entries); i++ {
-		mbr.Expand(entries[i].MBR)
+func computeNodesMBR(nodes []*Node) Rect {
+	var mbr Rect
+	for i := 0; i < len(nodes); i++ {
+		mbr.Expand(nodes[i].BoundingBox)
 	}
-
 	return mbr
 }
 
@@ -264,21 +246,21 @@ func (t *RTree) splitNode(node *Node) *Node {
 	// groupA node replaces the current node.
 	// groupB node is a new node and will be assigned part of the entries of the original node.
 	groupA := &Node{
-		MBR:     seeds[0].MBR,
-		Entries: []*Node{seeds[0]},
-		IsLeaf:  node.IsLeaf,
-		Parent:  node.Parent,
+		BoundingBox: seeds[0].BoundingBox,
+		Entries:     []*Entry{seeds[0]},
+		IsLeaf:      node.IsLeaf,
+		Parent:      node.Parent,
 	}
 
 	groupB := &Node{
-		MBR:     seeds[1].MBR,
-		Entries: []*Node{seeds[1]},
-		IsLeaf:  node.IsLeaf,
-		Parent:  node.Parent,
+		BoundingBox: seeds[1].BoundingBox,
+		Entries:     []*Entry{seeds[1]},
+		IsLeaf:      node.IsLeaf,
+		Parent:      node.Parent,
 	}
 
 	// Collect the remaining entries that aren't seeds to distribute
-	remaining := slices.DeleteFunc(node.Entries, func(entry *Node) bool {
+	remaining := slices.DeleteFunc(node.Entries, func(entry *Entry) bool {
 		return entry == seeds[0] || entry == seeds[1]
 	})
 
@@ -292,7 +274,7 @@ func (t *RTree) splitNode(node *Node) *Node {
 		targetNode := t.chooseGroup(entry, groupA, groupB)
 
 		targetNode.Entries = append(targetNode.Entries, entry)
-		targetNode.MBR.Expand(entry.MBR)
+		targetNode.BoundingBox.Expand(entry.BoundingBox)
 	}
 
 	// Replace original node with groupA
@@ -307,7 +289,7 @@ func (t *RTree) splitNode(node *Node) *Node {
 }
 
 // chooseGroup returns the group where entry should be assigned to.
-func (t *RTree) chooseGroup(entry, groupA, groupB *Node) *Node {
+func (t *RTree) chooseGroup(entry *Entry, groupA, groupB *Node) *Node {
 
 	// Ensure minimum number of entries is met
 	if len(groupA.Entries) < t.minEntries {
@@ -319,8 +301,8 @@ func (t *RTree) chooseGroup(entry, groupA, groupB *Node) *Node {
 
 	// Now choose the one which requires the lease enlargement
 	// If it's a tie, chose the one with smallest area
-	enlargeA := groupA.MBR.Enlargement(entry.MBR)
-	enlargeB := groupB.MBR.Enlargement(entry.MBR)
+	enlargeA := groupA.BoundingBox.Enlargement(entry.BoundingBox)
+	enlargeB := groupB.BoundingBox.Enlargement(entry.BoundingBox)
 
 	if enlargeA < enlargeB {
 		return groupA
@@ -330,7 +312,7 @@ func (t *RTree) chooseGroup(entry, groupA, groupB *Node) *Node {
 		return groupB
 	}
 
-	if groupA.MBR.Area() < groupB.MBR.Area() {
+	if groupA.BoundingBox.Area() < groupB.BoundingBox.Area() {
 		return groupA
 	}
 
@@ -338,14 +320,14 @@ func (t *RTree) chooseGroup(entry, groupA, groupB *Node) *Node {
 }
 
 // pickNext returns the index of the entry with the greatest preference to be inserted in a group.
-func (t *RTree) pickNext(entries []*Node, groupA *Node, groupB *Node) int {
+func (t *RTree) pickNext(entries []*Entry, groupA *Node, groupB *Node) int {
 
 	next := 0
 	maxDiff := -1.0
 
 	for i, entry := range entries {
-		d1 := groupA.MBR.Enlargement(entry.MBR)
-		d2 := groupB.MBR.Enlargement(entry.MBR)
+		d1 := groupA.BoundingBox.Enlargement(entry.BoundingBox)
+		d2 := groupB.BoundingBox.Enlargement(entry.BoundingBox)
 		diff := math.Abs(d1 - d2)
 		if diff > maxDiff {
 			maxDiff = diff
@@ -360,60 +342,5 @@ func (t *RTree) pickNext(entries []*Node, groupA *Node, groupB *Node) int {
 func (t *RTree) adjustEntriesParent(node *Node) {
 	for _, child := range node.Entries {
 		child.Parent = node
-	}
-}
-
-// Query finds all items intersecting the given Rect
-func (t *RTree) Query(searchRect Rect) []GeoReferenced {
-	if t.root == nil {
-		return nil
-	}
-
-	var results []GeoReferenced
-	t.search(t.root, searchRect, &results)
-	return results
-}
-
-func (t *RTree) Entries() []Node {
-
-	var entries []Node
-
-	stack := []*Node{t.root}
-
-	for len(stack) > 0 {
-
-		entry := stack[len(stack)-1]
-		stack = stack[:len(stack)-1]
-
-		for _, child := range entry.Entries {
-			if child.Data != nil {
-				entries = append(entries, *child)
-				continue
-			} else {
-				stack = append(stack, child)
-			}
-		}
-
-	}
-
-	return entries
-}
-
-// search performs the recursive search
-func (t *RTree) search(node *Node, searchRect Rect, results *[]GeoReferenced) {
-	if !node.MBR.Intersects(&searchRect) {
-		return
-	}
-
-	for _, entry := range node.Entries {
-		if entry.Data != nil {
-			// This is a data node
-			if entry.MBR.Intersects(&searchRect) {
-				*results = append(*results, entry.Data)
-			}
-		} else {
-			// This is an internal node
-			t.search(entry, searchRect, results)
-		}
 	}
 }
