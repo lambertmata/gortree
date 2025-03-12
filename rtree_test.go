@@ -144,4 +144,28 @@ func TestRTree_Query(t *testing.T) {
 		}
 	}
 
+	genovaLocation := cityLocations[0]
+	queryRes := rt.Query(genovaLocation.BoundingBox())
+
+	if queryRes[0].ID() != genovaLocation.ID() {
+		t.Errorf("Expected %s, got %s", genovaLocation.ID(), queryRes[0].ID())
+	}
+
+}
+
+func TestRTree_Delete(t *testing.T) {
+	rt := rtree.NewRTree()
+	for _, location := range cityLocations {
+		rt.Insert(&location)
+	}
+
+	genovaLocation := cityLocations[0]
+	_ = rt.Delete(&genovaLocation)
+
+	queryRes := rt.Query(genovaLocation.BoundingBox())
+
+	if len(queryRes) != 0 {
+		t.Errorf("Expected no entries in %s, got %d", genovaLocation.ID(), len(queryRes))
+	}
+
 }

@@ -7,13 +7,15 @@ func (t *RTree) Query(searchRect Rect) []GeoReferenced {
 	}
 
 	var results []GeoReferenced
+
 	t.search(t.root, searchRect, &results)
+
 	return results
 }
 
-func (t *RTree) Entries() []*Entry {
+func (t *RTree) Entries() []GeoReferenced {
 
-	var entries []*Entry
+	var entries []GeoReferenced
 
 	stack := []*Node{t.root}
 
@@ -23,7 +25,9 @@ func (t *RTree) Entries() []*Entry {
 		stack = stack[:len(stack)-1]
 
 		if curNode.IsLeaf {
-			entries = append(entries, curNode.Entries...)
+			for _, entry := range curNode.Children {
+				entries = append(entries, entry.Data)
+			}
 		} else {
 			stack = append(stack, curNode.Children...)
 		}
@@ -35,7 +39,8 @@ func (t *RTree) Entries() []*Entry {
 
 // search performs the recursive search
 func (t *RTree) search(node *Node, searchRect Rect, results *[]GeoReferenced) {
-	if !node.BoundingBox.Intersects(&searchRect) {
+
+	if !node.BoundingBox.Intersects(searchRect) {
 		return
 	}
 
@@ -44,8 +49,8 @@ func (t *RTree) search(node *Node, searchRect Rect, results *[]GeoReferenced) {
 		if curNode.IsLeaf {
 
 			// This is a data node
-			for _, entry := range curNode.Entries {
-				if entry.BoundingBox.Intersects(&searchRect) {
+			for _, entry := range curNode.Children {
+				if entry.BoundingBox.Intersects(searchRect) {
 					*results = append(*results, entry.Data)
 				}
 			}

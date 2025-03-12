@@ -1,6 +1,7 @@
 package rtree
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"slices"
@@ -64,7 +65,7 @@ func (t *RTree) Max() int {
 }
 
 // chooseLeaf selects the best node for inserting a new entry.
-func (t *RTree) chooseLeaf(node *Node, entry *Entry) *Node {
+func (t *RTree) chooseLeaf(node *Node, boundingBox Rect) *Node {
 
 	// The tree is descended until a leaf is reached, by selecting the child node which requires the least enlargement
 	// to contain rect.
@@ -82,7 +83,7 @@ func (t *RTree) chooseLeaf(node *Node, entry *Entry) *Node {
 			continue
 		}
 
-		enlargement := child.BoundingBox.Enlargement(entry.BoundingBox)
+		enlargement := child.BoundingBox.Enlargement(boundingBox)
 
 		if enlargement < minEnlargement {
 
@@ -99,16 +100,12 @@ func (t *RTree) chooseLeaf(node *Node, entry *Entry) *Node {
 		return node
 	}
 
-	return t.chooseLeaf(bestNode, entry)
+	return t.chooseLeaf(bestNode, boundingBox)
 }
 
 // updateNodeMBR Using current entries MBRs it updated the node BoundingBox.
 func (t *RTree) updateNodeMBR(node *Node) {
-	if node.IsLeaf {
-		node.BoundingBox = computeEntriesMBR(node.Entries)
-	} else {
-		node.BoundingBox = computeNodesMBR(node.Children)
-	}
+	node.BoundingBox = computeNodesMBR(node.Children)
 }
 
 // updateMBRsUpward updates MBRs starting from node up to the root.
@@ -174,13 +171,13 @@ func (t *RTree) adjustTree(node *Node, splitNode *Node) {
 func (t *RTree) Insert(data GeoReferenced) {
 
 	// Create the new entry node
-	newEntry := NewEntry(data)
+	newEntry := NewLeafNode(data)
 
 	// Find the best leaf node to insert the new entry node.
-	leaf := t.chooseLeaf(t.root, newEntry)
+	leaf := t.chooseLeaf(t.root, newEntry.BoundingBox)
 
 	// Add entry node to leaf
-	leaf.Entries = append(leaf.Entries, newEntry)
+	leaf.Children = append(leaf.Children, newEntry)
 	newEntry.Parent = leaf
 
 	// Split if the leaf overflows
@@ -192,20 +189,20 @@ func (t *RTree) Insert(data GeoReferenced) {
 }
 
 // pickSeeds gives the two entries that are the farthest apart
-func (t *RTree) pickSeeds(nodeA *Node) [2]*Entry {
+func (t *RTree) pickSeeds(nodeA *Node) [2]*Node {
 
-	seeds := [2]*Entry{}
+	seeds := [2]*Node{}
 
 	var maxEnlargement float64
 
 	// Pick the entries that (would waste the more area if put together).
-	for i := 0; i < len(nodeA.Entries); i++ {
-		for j := 0; j < len(nodeA.Entries); j++ {
-			enlargement := nodeA.Entries[i].BoundingBox.Enlargement(nodeA.Entries[j].BoundingBox)
+	for i := 0; i < len(nodeA.Children); i++ {
+		for j := 0; j < len(nodeA.Children); j++ {
+			enlargement := nodeA.Children[i].BoundingBox.Enlargement(nodeA.Children[j].BoundingBox)
 			if enlargement > maxEnlargement {
 				maxEnlargement = enlargement
-				seeds[0] = nodeA.Entries[i]
-				seeds[1] = nodeA.Entries[j]
+				seeds[0] = nodeA.Children[i]
+				seeds[1] = nodeA.Children[j]
 			}
 		}
 	}
@@ -213,14 +210,7 @@ func (t *RTree) pickSeeds(nodeA *Node) [2]*Entry {
 	return seeds
 }
 
-func computeEntriesMBR(entries []*Entry) Rect {
-	var mbr Rect
-	for i := 0; i < len(entries); i++ {
-		mbr.Expand(entries[i].BoundingBox)
-	}
-	return mbr
-}
-
+// computeNodesMBR returns the bounding box to contain all the nodes.
 func computeNodesMBR(nodes []*Node) Rect {
 	var mbr Rect
 	for i := 0; i < len(nodes); i++ {
@@ -229,8 +219,9 @@ func computeNodesMBR(nodes []*Node) Rect {
 	return mbr
 }
 
+// splitNodeIfNeeded preforms splitNode only when node is overflowing.
 func (t *RTree) splitNodeIfNeeded(node *Node) *Node {
-	if len(node.Entries) <= t.maxEntries {
+	if !t.nodeOverflowing(node) {
 		return nil
 	}
 	return t.splitNode(node)
@@ -247,20 +238,20 @@ func (t *RTree) splitNode(node *Node) *Node {
 	// groupB node is a new node and will be assigned part of the entries of the original node.
 	groupA := &Node{
 		BoundingBox: seeds[0].BoundingBox,
-		Entries:     []*Entry{seeds[0]},
+		Children:    []*Node{seeds[0]},
 		IsLeaf:      node.IsLeaf,
 		Parent:      node.Parent,
 	}
 
 	groupB := &Node{
 		BoundingBox: seeds[1].BoundingBox,
-		Entries:     []*Entry{seeds[1]},
+		Children:    []*Node{seeds[1]},
 		IsLeaf:      node.IsLeaf,
 		Parent:      node.Parent,
 	}
 
 	// Collect the remaining entries that aren't seeds to distribute
-	remaining := slices.DeleteFunc(node.Entries, func(entry *Entry) bool {
+	remaining := slices.DeleteFunc(node.Children, func(entry *Node) bool {
 		return entry == seeds[0] || entry == seeds[1]
 	})
 
@@ -273,7 +264,7 @@ func (t *RTree) splitNode(node *Node) *Node {
 
 		targetNode := t.chooseGroup(entry, groupA, groupB)
 
-		targetNode.Entries = append(targetNode.Entries, entry)
+		targetNode.Children = append(targetNode.Children, entry)
 		targetNode.BoundingBox.Expand(entry.BoundingBox)
 	}
 
@@ -289,13 +280,13 @@ func (t *RTree) splitNode(node *Node) *Node {
 }
 
 // chooseGroup returns the group where entry should be assigned to.
-func (t *RTree) chooseGroup(entry *Entry, groupA, groupB *Node) *Node {
+func (t *RTree) chooseGroup(entry *Node, groupA, groupB *Node) *Node {
 
 	// Ensure minimum number of entries is met
-	if len(groupA.Entries) < t.minEntries {
+	if len(groupA.Children) < t.minEntries {
 		return groupA
 	}
-	if len(groupB.Entries) < t.minEntries {
+	if len(groupB.Children) < t.minEntries {
 		return groupB
 	}
 
@@ -320,7 +311,7 @@ func (t *RTree) chooseGroup(entry *Entry, groupA, groupB *Node) *Node {
 }
 
 // pickNext returns the index of the entry with the greatest preference to be inserted in a group.
-func (t *RTree) pickNext(entries []*Entry, groupA *Node, groupB *Node) int {
+func (t *RTree) pickNext(entries []*Node, groupA *Node, groupB *Node) int {
 
 	next := 0
 	maxDiff := -1.0
@@ -340,7 +331,162 @@ func (t *RTree) pickNext(entries []*Entry, groupA *Node, groupB *Node) int {
 
 // adjustEntriesParent updates the node entries such that their Parent pointer points to the node.
 func (t *RTree) adjustEntriesParent(node *Node) {
-	for _, child := range node.Entries {
+	for _, child := range node.Children {
 		child.Parent = node
 	}
+}
+
+// removeNodeFromParent removes node from parent, without knowing its index in the parent.Children slice.
+func (t *RTree) removeNodeFromParent(parent, node *Node) error {
+
+	if parent == nil {
+		return errors.New("failed to remove node without parent")
+	}
+
+	for i, child := range parent.Children {
+		if child != node {
+			continue
+		}
+		// Remove current from parent
+		parent.Children = append(parent.Children[:i], parent.Children[i+1:]...)
+		break
+	}
+
+	return nil
+}
+
+// nodeOverflowing returns whether the current node has too many entries.
+func (t *RTree) nodeOverflowing(node *Node) bool {
+	return len(node.Children) > t.maxEntries
+}
+
+// nodeUnderflowing returns whether the current node has too few entries.
+func (t *RTree) nodeUnderflowing(node *Node) bool {
+	return len(node.Children) < t.minEntries
+}
+
+// collectLeafNodes returns the current node descendant leaf nodes.
+func (t *RTree) collectLeafNodes(node *Node) []*Node {
+	if node.IsLeaf {
+		return node.Children
+	}
+
+	var leafNodes []*Node
+	for _, child := range node.Children {
+		leafNodes = append(leafNodes, t.collectLeafNodes(child)...)
+	}
+	return leafNodes
+}
+
+// CondenseTree handles nodes with too few entries after deletion. It removes underflowing nodes and returns their
+// entries so they can be reinserted.
+func (t *RTree) condenseTree(node *Node) []*Node {
+
+	var orphanedEntries []*Node // Stores the node that will need to be reinserted
+	currentNode := node         // The node where the delete took place
+
+	// Repeat the process from current node all the way up to the root
+	for currentNode.Parent != nil {
+
+		parent := currentNode.Parent
+
+		// Check if the current node has too few entries
+		if t.nodeUnderflowing(currentNode) {
+
+			_ = t.removeNodeFromParent(parent, currentNode)
+
+			// Collect all leaf nodes that need to be reinserted
+			if currentNode.IsLeaf {
+				// Collect all entries
+				orphanedEntries = append(orphanedEntries, currentNode.Children...)
+			} else {
+				// Collect all entries descending the subtree
+				orphanedEntries = append(orphanedEntries, t.collectLeafNodes(currentNode)...)
+			}
+
+		} else {
+			// Just update the current node bounding box
+			t.updateNodeMBR(currentNode)
+		}
+
+		currentNode = parent
+	}
+
+	// Finally adjust the root bounding box as well
+	t.updateNodeMBR(t.root)
+
+	return orphanedEntries
+
+}
+
+// findLeaf starting from the root it searches the given data by ID, narrowing down the results using the bounding box.
+func (t *RTree) findLeaf(data GeoReferenced) *Node {
+
+	if t.root == nil {
+		return nil
+	}
+
+	stack := []*Node{t.root}
+
+	targetBoundingBox := data.BoundingBox()
+	targetID := data.ID()
+
+	// Traverse the tree starting from the root
+	for len(stack) > 0 {
+
+		node := stack[len(stack)-1]
+		stack = stack[:len(stack)-1]
+
+		// Follow internal nodes paths only when the target bounding box is guaranteed to be in the subtree
+		if !node.IsLeaf {
+			if node.BoundingBox.Intersects(targetBoundingBox) {
+				stack = append(stack, node.Children...)
+			}
+			continue
+		}
+
+		// Leaf node here. Just return the entry node if the ID matches
+		for _, leaf := range node.Children {
+			if leaf.Data != nil && leaf.Data.ID() == targetID {
+				return node
+			}
+		}
+
+	}
+
+	return nil
+}
+
+// Delete deletes the entry from the tree by the data ID.
+func (t *RTree) Delete(data GeoReferenced) error {
+
+	// Find the leaf node which contains data ID
+	leaf := t.findLeaf(data)
+
+	if leaf == nil {
+		return errors.New("node to delete not found")
+	}
+
+	// Remove the entry from the leaf node
+	leaf.Children = slices.DeleteFunc(leaf.Children, func(entry *Node) bool {
+		return entry.Data != nil && entry.Data.ID() == data.ID()
+	})
+
+	// Handle the underflow after deletion.
+	// If the node has too few entries, it will be removed and its entries returned to be inserted.
+	// This is done recursively.
+	orphanedEntries := t.condenseTree(leaf)
+
+	// Reinsert the entries
+	for _, orphan := range orphanedEntries {
+		t.Insert(orphan.Data)
+	}
+
+	// If leaf is the only child of the root, compact the tree by making the leaf the root.
+	if leaf.Parent == nil && len(leaf.Children) == 1 {
+		t.root = leaf.Children[0]
+		t.root.Parent = nil
+	}
+
+	return nil
 }
