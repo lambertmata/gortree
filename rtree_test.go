@@ -1,8 +1,8 @@
-package rtree_test
+package gortree_test
 
 import (
+	"gortree"
 	"log/slog"
-	"ralbero"
 	"strconv"
 	"testing"
 )
@@ -16,11 +16,11 @@ func (l *Location) ID() string {
 	return l.Name
 }
 
-func (l *Location) BoundingBox() rtree.Rect {
+func (l *Location) BoundingBox() gortree.Rect {
 	x := l.Coordinates[0]
 	y := l.Coordinates[1]
 
-	rect := rtree.NewRect(x, y, x, y)
+	rect := gortree.NewRect(x, y, x, y)
 
 	return *rect
 }
@@ -46,14 +46,14 @@ var cityLocations = []Location{
 	{"Mexico City", [2]float64{-99.1332, 19.4326}},
 }
 
-var WholeWorld = rtree.NewRect(
+var WholeWorld = gortree.NewRect(
 	-180,
 	-90,
 	180,
 	90,
 )
 
-var NorthAmerica = rtree.NewRect(
+var NorthAmerica = gortree.NewRect(
 	-168.0,
 	5.0,
 	-52.0,
@@ -61,26 +61,26 @@ var NorthAmerica = rtree.NewRect(
 )
 
 func TestNewRTree(t *testing.T) {
-	rt := rtree.NewRTree()
+	rt := gortree.NewRTree()
 
-	if rt.Min() != rtree.MinEntries {
-		t.Errorf("Expected rtree.MinEntries %d, got %d", rt.Min(), rtree.MinEntries)
+	if rt.Min() != gortree.MinEntries {
+		t.Errorf("Expected rtree.MinEntries %d, got %d", rt.Min(), gortree.MinEntries)
 	}
 
-	if rt.Max() != rtree.MaxEntries {
-		t.Errorf("Expected rtree.MaxEntries %d, got %d", rt.Max(), rtree.MaxEntries)
+	if rt.Max() != gortree.MaxEntries {
+		t.Errorf("Expected rtree.MaxEntries %d, got %d", rt.Max(), gortree.MaxEntries)
 	}
 }
 
 func TestNewRTreeWithMinMax(t *testing.T) {
 
-	rt, err := rtree.NewRTreeWithMinMax(1, 5)
+	rt, err := gortree.NewRTreeWithMinMax(1, 5)
 
 	if err == nil {
 		t.Errorf("Expected error for min entries = 1")
 	}
 
-	rt, err = rtree.NewRTreeWithMinMax(4, 1)
+	rt, err = gortree.NewRTreeWithMinMax(4, 1)
 
 	if err == nil {
 		t.Errorf("Expected error for max entries = 1")
@@ -89,7 +89,7 @@ func TestNewRTreeWithMinMax(t *testing.T) {
 	minEntries := 2
 	maxEntries := 8
 
-	rt, err = rtree.NewRTreeWithMinMax(minEntries, maxEntries)
+	rt, err = gortree.NewRTreeWithMinMax(minEntries, maxEntries)
 
 	if rt != nil {
 		if rt.Min() != minEntries {
@@ -107,7 +107,7 @@ func TestNewRTreeWithMinMax(t *testing.T) {
 
 func TestRTree_Insert(t *testing.T) {
 
-	rt := rtree.NewRTree()
+	rt := gortree.NewRTree()
 
 	for _, location := range cityLocations {
 		rt.Insert(&location)
@@ -122,16 +122,16 @@ func TestRTree_Insert(t *testing.T) {
 
 func TestRTree_Query(t *testing.T) {
 
-	rt := rtree.NewRTree()
+	rt := gortree.NewRTree()
 
 	testCases := []struct {
 		Name     string
-		Rect     rtree.Rect
+		Rect     gortree.Rect
 		Expected int
 	}{
 		{"Whole World", *WholeWorld, 18},
 		{"North America", *NorthAmerica, 3},
-		{"Empty Rect", rtree.Rect{}, 0},
+		{"Empty Rect", gortree.Rect{}, 0},
 	}
 
 	for _, location := range cityLocations {
@@ -159,7 +159,7 @@ func TestRTree_Query(t *testing.T) {
 }
 
 func TestRTree_Delete(t *testing.T) {
-	rt := rtree.NewRTree()
+	rt := gortree.NewRTree()
 	for _, location := range cityLocations {
 		rt.Insert(&location)
 	}

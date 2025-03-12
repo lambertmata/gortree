@@ -1,17 +1,17 @@
-package rtree
+package gortree
 
-type Node struct {
+type node struct {
 	BoundingBox Rect
 	IsLeaf      bool
-	Children    []*Node
-	Parent      *Node
-	Data        GeoReferenced
+	Children    []*node
+	Parent      *node
+	Data        Spatial
 }
 
-// NewLeafNode creates an entry Node with data.
-func NewLeafNode(data GeoReferenced) *Node {
+// newLeafNode creates an entry node with data.
+func newLeafNode(data Spatial) *node {
 
-	newEntry := &Node{
+	newEntry := &node{
 		Data:        data,
 		BoundingBox: data.BoundingBox(),
 	}

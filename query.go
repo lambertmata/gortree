@@ -1,35 +1,35 @@
-package rtree
+package gortree
 
 // Query finds all items intersecting the given Rect
-func (t *RTree) Query(searchRect Rect) []GeoReferenced {
+func (t *RTree) Query(r Rect) []Spatial {
 	if t.root == nil {
 		return nil
 	}
 
-	var results []GeoReferenced
+	var results []Spatial
 
-	t.search(t.root, searchRect, &results)
+	t.search(t.root, r, &results)
 
 	return results
 }
 
-func (t *RTree) Entries() []GeoReferenced {
+func (t *RTree) Entries() []Spatial {
 
-	var entries []GeoReferenced
+	var entries []Spatial
 
-	stack := []*Node{t.root}
+	stack := []*node{t.root}
 
 	for len(stack) > 0 {
 
-		curNode := stack[len(stack)-1]
+		cur := stack[len(stack)-1]
 		stack = stack[:len(stack)-1]
 
-		if curNode.IsLeaf {
-			for _, entry := range curNode.Children {
-				entries = append(entries, entry.Data)
+		if cur.IsLeaf {
+			for _, e := range cur.Children {
+				entries = append(entries, e.Data)
 			}
 		} else {
-			stack = append(stack, curNode.Children...)
+			stack = append(stack, cur.Children...)
 		}
 
 	}
@@ -38,18 +38,18 @@ func (t *RTree) Entries() []GeoReferenced {
 }
 
 // search performs the recursive search
-func (t *RTree) search(node *Node, searchRect Rect, results *[]GeoReferenced) {
+func (t *RTree) search(n *node, searchRect Rect, results *[]Spatial) {
 
-	if !node.BoundingBox.Intersects(searchRect) {
+	if !n.BoundingBox.Intersects(searchRect) {
 		return
 	}
 
-	for _, curNode := range node.Children {
+	for _, cur := range n.Children {
 
-		if curNode.IsLeaf {
+		if cur.IsLeaf {
 
 			// This is a data node
-			for _, entry := range curNode.Children {
+			for _, entry := range cur.Children {
 				if entry.BoundingBox.Intersects(searchRect) {
 					*results = append(*results, entry.Data)
 				}
@@ -57,7 +57,7 @@ func (t *RTree) search(node *Node, searchRect Rect, results *[]GeoReferenced) {
 
 		} else {
 			// This is an internal node
-			t.search(curNode, searchRect, results)
+			t.search(cur, searchRect, results)
 		}
 	}
 }
