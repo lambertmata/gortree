@@ -22,13 +22,13 @@ func (r *Rect) Expand(otherRect Rect) {
 }
 
 // Contains Checks if a rectangle contains another
-func (r *Rect) Contains(other *Rect) bool {
+func (r *Rect) Contains(other Rect) bool {
 	return r.MinX <= other.MinX && r.MaxX >= other.MaxX &&
 		r.MinY <= other.MinY && r.MaxY >= other.MaxY
 }
 
 // Intersects Checks if a rectangle intersects another
-func (r *Rect) Intersects(other *Rect) bool {
+func (r *Rect) Intersects(other Rect) bool {
 	return r.MinX <= other.MaxX && r.MaxX >= other.MinX &&
 		r.MinY <= other.MaxY && r.MaxY >= other.MinY
 }

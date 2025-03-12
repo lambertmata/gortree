@@ -91,13 +91,18 @@ func TestNewRTreeWithMinMax(t *testing.T) {
 
 	rt, err = rtree.NewRTreeWithMinMax(minEntries, maxEntries)
 
-	if rt.Min() != minEntries {
-		t.Errorf("Expected rtree.MinEntries %d, got %d", rt.Min(), minEntries)
+	if rt != nil {
+		if rt.Min() != minEntries {
+			t.Errorf("Expected rtree.MinEntries %d, got %d", rt.Min(), minEntries)
+		}
+
+		if rt.Max() != maxEntries {
+			t.Errorf("Expected rtree.MaxEntries %d, got %d", rt.Max(), maxEntries)
+		}
+	} else {
+		t.Errorf("Expected rtree.NewRTreeWithMinMax to be non-nil")
 	}
 
-	if rt.Max() != maxEntries {
-		t.Errorf("Expected rtree.MaxEntries %d, got %d", rt.Max(), maxEntries)
-	}
 }
 
 func TestRTree_Insert(t *testing.T) {

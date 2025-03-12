@@ -46,7 +46,7 @@ func TestContains(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run("Contains", func(t *testing.T) {
-			result := tt.rect.Contains(tt.contained)
+			result := tt.rect.Contains(*tt.contained)
 			if result != tt.shouldContain {
 				t.Errorf("Expected %v but got %v", tt.shouldContain, result)
 			}
@@ -79,7 +79,7 @@ func TestIntersects(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run("Intersects", func(t *testing.T) {
-			result := tt.rect.Intersects(tt.intersect)
+			result := tt.rect.Intersects(*tt.intersect)
 			if result != tt.shouldIntersect {
 				t.Errorf("Expected %v but got %v", tt.shouldIntersect, result)
 			}
