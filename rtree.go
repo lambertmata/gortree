@@ -189,19 +189,28 @@ func (t *RTree) Insert(data Spatial) {
 }
 
 // pickSeeds selects the two entries that are the farthest apart.
-func (t *RTree) pickSeeds(n *node) [2]*node {
+func (t *RTree) pickSeeds(entryNodes []*node) [2]*node {
 
-	seeds := [2]*node{}
-	maxEnlargement := 0.0
+	seeds := [2]*node{entryNodes[0], entryNodes[1]}
+	maxWaste := -1.0
 
-	// Pick the entries that would waste the more area if put together
-	for i := 0; i < len(n.Children); i++ {
-		for j := 0; j < len(n.Children); j++ {
-			enlargement := n.Children[i].BoundingBox.Enlargement(n.Children[j].BoundingBox)
-			if enlargement > maxEnlargement {
-				maxEnlargement = enlargement
-				seeds[0] = n.Children[i]
-				seeds[1] = n.Children[j]
+	childCount := len(entryNodes)
+
+	// Pick the pair of entries that would waste the most area if grouped together.
+	// To find the most wasteful pair, calculate the difference between the combined MBR area
+	// and the sum of individual areas for each pair combination.
+	for i := 0; i < childCount; i++ {
+		for j := i + 1; j < childCount; j++ {
+
+			mbr := entryNodes[i].BoundingBox
+			mbr.Expand(entryNodes[j].BoundingBox)
+
+			waste := mbr.Area() - (entryNodes[i].BoundingBox.Area() + entryNodes[j].BoundingBox.Area())
+
+			if waste > maxWaste {
+				maxWaste = waste
+				seeds[0] = entryNodes[i]
+				seeds[1] = entryNodes[j]
 			}
 		}
 	}
@@ -230,8 +239,7 @@ func (t *RTree) splitNodeIfNeeded(node *node) *node {
 func (t *RTree) splitNode(n *node) *node {
 
 	// Pick two entries that are furthest apart
-	seeds := t.pickSeeds(n)
-
+	seeds := t.pickSeeds(n.Children)
 	// Create two groups with a seed each
 	a := &node{
 		BoundingBox: seeds[0].BoundingBox,
