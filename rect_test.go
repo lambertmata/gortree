@@ -1,7 +1,7 @@
 package gortree_test
 
 import (
-	"gortree"
+	"github.com/lambertmata/gortree"
 	"testing"
 )
 
