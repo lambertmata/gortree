@@ -1,18 +1,5 @@
 package gortree
 
-// Query finds all items intersecting the given Rect
-func (t *RTree) Query(r Rect) []Spatial {
-	if t.root == nil {
-		return nil
-	}
-
-	var results []Spatial
-
-	t.search(t.root, r, &results)
-
-	return results
-}
-
 func (t *RTree) Entries() []Spatial {
 
 	var entries []Spatial
@@ -37,27 +24,35 @@ func (t *RTree) Entries() []Spatial {
 	return entries
 }
 
-// search performs the recursive search
-func (t *RTree) search(n *node, searchRect Rect, results *[]Spatial) {
+// Query finds all items intersecting the given Rect
+func (t *RTree) Query(r Rect) []Spatial {
 
-	if !n.BoundingBox.Intersects(searchRect) {
-		return
-	}
+	stack := []*node{t.root}
+	var results []Spatial
 
-	for _, cur := range n.Children {
+	for len(stack) > 0 {
 
+		lastIdx := len(stack) - 1
+		cur := stack[lastIdx]
+		stack = stack[:lastIdx]
+
+		// Skip non-intersecting branches
+		if !cur.BoundingBox.Intersects(r) {
+			continue
+		}
+
+		// We have a leaf, return all intersecting entries
 		if cur.IsLeaf {
-
-			// This is a data node
-			for _, entry := range cur.Children {
-				if entry.BoundingBox.Intersects(searchRect) {
-					*results = append(*results, entry.Data)
+			for _, e := range cur.Children {
+				if e.BoundingBox.Intersects(r) {
+					results = append(results, e.Data)
 				}
 			}
-
 		} else {
-			// This is an internal node
-			t.search(cur, searchRect, results)
+			// We have an internal node. Add all children to be processed
+			stack = append(stack, cur.Children...)
 		}
 	}
+
+	return results
 }

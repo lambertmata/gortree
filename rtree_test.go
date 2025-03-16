@@ -2,8 +2,6 @@ package gortree_test
 
 import (
 	"github.com/lambertmata/gortree"
-	"log/slog"
-	"strconv"
 	"testing"
 )
 
@@ -141,10 +139,6 @@ func TestRTree_Query(t *testing.T) {
 	for _, testCase := range testCases {
 		foundEntries := rt.Query(testCase.Rect)
 		if len(foundEntries) != testCase.Expected {
-			for i, entry := range foundEntries {
-				slog.Info("found", strconv.Itoa(i), entry.ID())
-			}
-
 			t.Errorf("Expected %d entries in %s, got %d", testCase.Expected, testCase.Name, len(foundEntries))
 		}
 	}
@@ -171,6 +165,32 @@ func TestRTree_Delete(t *testing.T) {
 
 	if len(queryRes) != 0 {
 		t.Errorf("Expected no entries in %s, got %d", genovaLocation.ID(), len(queryRes))
+	}
+
+}
+
+func TestPointInsertAndQuery(t *testing.T) {
+
+	rt := gortree.NewRTree()
+	l := Location{
+		Name:        "Null Island",
+		Coordinates: [2]float64{0, 0},
+	}
+
+	rt.Insert(&l)
+
+	res := rt.Query(gortree.Rect{})
+
+	if len(res) != 1 {
+		t.Errorf("Expected 1 entry, got %d", len(res))
+	}
+
+	rt.Delete(&l)
+
+	res = rt.Entries()
+
+	if len(res) != 0 {
+		t.Errorf("Expected 0 entry, got %d", len(res))
 	}
 
 }
