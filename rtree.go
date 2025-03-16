@@ -431,21 +431,20 @@ func (t *RTree) findLeaf(data Spatial) *node {
 		return nil
 	}
 
-	stack := []*node{t.root}
+	stack := NewStackFrom(t.root)
 
 	bbox := data.BoundingBox()
 	id := data.ID()
 
 	// Traverse the tree starting from the root
-	for len(stack) > 0 {
+	for !stack.Empty() {
 
-		n := stack[len(stack)-1]
-		stack = stack[:len(stack)-1]
+		n, _ := stack.Pop()
 
 		// Follow internal nodes paths only when the target bounding box is guaranteed to be in the subtree
 		if !n.IsLeaf {
 			if n.BoundingBox.Intersects(bbox) {
-				stack = append(stack, n.Children...)
+				stack.Push(n.Children...)
 			}
 			continue
 		}
