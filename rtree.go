@@ -402,7 +402,7 @@ func (t *RTree) condenseTree(n *node) ([]*node, error) {
 		if t.nodeUnderflowing(cur) {
 
 			if err := t.removeNodeFromParent(parent, cur); err != nil {
-				return nil, fmt.Errorf("condenseTree:%s", err)
+				return nil, fmt.Errorf("condenseTree: %w", err)
 			}
 
 			// Collect all leaf nodes that need to be reinserted
