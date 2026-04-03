@@ -79,10 +79,6 @@ func (t *RTree) chooseLeaf(n *node, boundingBox Rect) *node {
 
 	for _, child := range n.Children {
 
-		if n.IsLeaf {
-			continue
-		}
-
 		enlargement := child.BoundingBox.Enlargement(boundingBox)
 
 		if enlargement < minEnlargement {
@@ -489,8 +485,8 @@ func (t *RTree) Delete(data Spatial) error {
 	}
 
 	// Make the leaf the new root if it's the only one child
-	if leaf.Parent == nil && len(leaf.Children) == 1 {
-		t.root = leaf.Children[0]
+	if !t.root.IsLeaf && len(t.root.Children) == 1 {
+		t.root = t.root.Children[0]
 		t.root.Parent = nil
 	}
 
