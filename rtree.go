@@ -166,6 +166,10 @@ func (t *RTree) adjustTree(n *node, splitNode *node) {
 // Insert adds a new item to the tree.
 func (t *RTree) Insert(data Spatial) {
 
+	if data == nil {
+		return
+	}
+
 	// Create the new entry node
 	e := newLeafNode(data)
 
@@ -463,6 +467,10 @@ func (t *RTree) findLeaf(data Spatial) *node {
 
 // Delete deletes the entry from the tree by the data ID.
 func (t *RTree) Delete(data Spatial) error {
+
+	if data == nil {
+		return errors.New("data is nil")
+	}
 
 	// Find the leaf node which contains data ID
 	leaf := t.findLeaf(data)
