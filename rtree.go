@@ -221,7 +221,11 @@ func (t *RTree) pickSeeds(entryNodes []*node) [2]*node {
 // computeNodesMBR returns the minimum bounding rectangle containing all nodes.
 func computeNodesMBR(nodes []*node) Rect {
 	var mbr Rect
-	for _, n := range nodes {
+	if len(nodes) == 0 {
+		return mbr
+	}
+	mbr = nodes[0].BoundingBox
+	for _, n := range nodes[1:] {
 		mbr.Expand(n.BoundingBox)
 	}
 	return mbr
