@@ -449,7 +449,7 @@ func (t *RTree) findLeaf(data Spatial) *node {
 
 		// Follow internal nodes paths only when the target bounding box is guaranteed to be in the subtree
 		if !n.IsLeaf {
-			if n.BoundingBox.Intersects(bbox) {
+			if n.BoundingBox.Contains(bbox) {
 				stack.Push(n.Children...)
 			}
 			continue
