@@ -361,7 +361,7 @@ func (t *RTree) removeNodeFromParent(parent, node *node) error {
 		break
 	}
 
-	return nil
+	return errors.New("node not found in parent's children")
 }
 
 // nodeOverflowing returns whether the current node has too many entries.
@@ -389,7 +389,7 @@ func (t *RTree) collectLeafNodes(n *node) []*node {
 
 // CondenseTree handles nodes with too few entries after deletion. It removes underflowing nodes and returns their
 // entries so they can be reinserted.
-func (t *RTree) condenseTree(n *node) []*node {
+func (t *RTree) condenseTree(n *node) ([]*node, error) {
 
 	var orphans []*node // Stores the node that will need to be reinserted
 	cur := n            // The node where the delete took place
@@ -402,7 +402,9 @@ func (t *RTree) condenseTree(n *node) []*node {
 		// Check if the current node has too few entries
 		if t.nodeUnderflowing(cur) {
 
-			_ = t.removeNodeFromParent(parent, cur)
+			if err := t.removeNodeFromParent(parent, cur); err != nil {
+				return nil, fmt.Errorf("condenseTree:%s", err)
+			}
 
 			// Collect all leaf nodes that need to be reinserted
 			if cur.IsLeaf {
@@ -424,7 +426,7 @@ func (t *RTree) condenseTree(n *node) []*node {
 	// Finally adjust the root bounding box as well
 	t.updateNodeMBR(t.root)
 
-	return orphans
+	return orphans, nil
 
 }
 
@@ -485,7 +487,10 @@ func (t *RTree) Delete(data Spatial) error {
 	})
 
 	// Handle the underflow after deletion and collect orphaned entries
-	orphans := t.condenseTree(leaf)
+	orphans, err := t.condenseTree(leaf)
+	if err != nil {
+		return fmt.Errorf("delete %s: %w", data.ID(), err)
+	}
 
 	// Reinsert the orphaned entries
 	for _, o := range orphans {
