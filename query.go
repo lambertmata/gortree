@@ -2,7 +2,7 @@ package gortree
 
 func (t *RTree) Entries() []Spatial {
 
-	var entries []Spatial
+	entries := make([]Spatial, 0)
 
 	stack := NewStackFrom(t.root)
 
@@ -27,7 +27,7 @@ func (t *RTree) Entries() []Spatial {
 func (t *RTree) Query(r Rect) []Spatial {
 
 	stack := NewStackFrom(t.root)
-	var results []Spatial
+	results := make([]Spatial, 0)
 
 	for !stack.Empty() {
 
