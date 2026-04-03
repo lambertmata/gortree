@@ -353,12 +353,11 @@ func (t *RTree) removeNodeFromParent(parent, node *node) error {
 	}
 
 	for i, c := range parent.Children {
-		if c != node {
-			continue
+		// find and remove node in parent's children
+		if c == node {
+			parent.Children = append(parent.Children[:i], parent.Children[i+1:]...)
+			return nil
 		}
-		// Remove current from parent
-		parent.Children = append(parent.Children[:i], parent.Children[i+1:]...)
-		break
 	}
 
 	return errors.New("node not found in parent's children")
