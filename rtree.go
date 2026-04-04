@@ -260,9 +260,12 @@ func (t *RTree) splitNode(n *node) *node {
 	}
 
 	// Collect remaining entries to distribute (that aren't seeds)
-	remaining := slices.DeleteFunc(n.Children, func(e *node) bool {
-		return e == seeds[0] || e == seeds[1]
-	})
+	remaining := make([]*node, 0, len(n.Children)-2)
+	for _, c := range n.Children {
+		if c != seeds[0] && c != seeds[1] {
+			remaining = append(remaining, c)
+		}
+	}
 
 	// Distribute remaining entries between a and b
 	for len(remaining) > 0 {
