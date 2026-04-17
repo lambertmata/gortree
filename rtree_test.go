@@ -1,8 +1,11 @@
 package gortree_test
 
 import (
-	"github.com/lambertmata/gortree"
+	"fmt"
+	"sync"
 	"testing"
+
+	"github.com/lambertmata/gortree"
 )
 
 type Location struct {
@@ -167,6 +170,56 @@ func TestRTree_Delete(t *testing.T) {
 		t.Errorf("Expected no entries in %s, got %d", genovaLocation.ID(), len(queryRes))
 	}
 
+}
+
+func TestConcurrent(t *testing.T) {
+
+	rt := gortree.NewRTree()
+
+	const writers = 8
+	const opsPerWriter = 200
+	const readers = 4
+	const readsPerReader = 500
+
+	var wg sync.WaitGroup
+
+	// Writers: each inserts then deletes its own set of IDs.
+	for w := 0; w < writers; w++ {
+		wg.Add(1)
+		go func(worker int) {
+			defer wg.Done()
+
+			items := make([]*Location, opsPerWriter)
+			for i := 0; i < opsPerWriter; i++ {
+				x := float64((worker*opsPerWriter + i) % 360) - 180
+				y := float64((worker*opsPerWriter+i)%180) - 90
+				items[i] = &Location{
+					Name:        fmt.Sprintf("w%d-i%d", worker, i),
+					Coordinates: [2]float64{x, y},
+				}
+				rt.Insert(items[i])
+			}
+			for _, item := range items {
+				_ = rt.Delete(item)
+			}
+		}(w)
+	}
+
+	// Readers: concurrent Query/Entries calls during the writer activity.
+	for r := 0; r < readers; r++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for i := 0; i < readsPerReader; i++ {
+				_ = rt.Query(*WholeWorld)
+				if i%10 == 0 {
+					_ = rt.Entries()
+				}
+			}
+		}()
+	}
+
+	wg.Wait()
 }
 
 func TestPointInsertAndQuery(t *testing.T) {

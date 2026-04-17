@@ -2,6 +2,9 @@ package gortree
 
 func (t *RTree) Entries() []Spatial {
 
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+
 	entries := make([]Spatial, 0)
 
 	stack := NewStackFrom(t.root)
@@ -25,6 +28,9 @@ func (t *RTree) Entries() []Spatial {
 
 // Query finds all items intersecting the given Rect
 func (t *RTree) Query(r Rect) []Spatial {
+
+	t.mu.RLock()
+	defer t.mu.RUnlock()
 
 	stack := NewStackFrom(t.root)
 	results := make([]Spatial, 0)

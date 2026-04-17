@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"slices"
+	"sync"
 )
 
 type Spatial interface {
@@ -13,6 +14,7 @@ type Spatial interface {
 }
 
 type RTree struct {
+	mu         sync.RWMutex
 	root       *node
 	maxEntries int
 	minEntries int
@@ -170,6 +172,15 @@ func (t *RTree) Insert(data Spatial) {
 		return
 	}
 
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	t.insertEntry(data)
+}
+
+// insertEntry requires t.mu held for writing.
+func (t *RTree) insertEntry(data Spatial) {
+
 	// Create the new entry node
 	e := newLeafNode(data)
 
@@ -185,7 +196,6 @@ func (t *RTree) Insert(data Spatial) {
 
 	// propagate changes upward
 	t.adjustTree(leaf, splitNode)
-
 }
 
 // pickSeeds selects the two entries that are the farthest apart.
@@ -476,6 +486,9 @@ func (t *RTree) Delete(data Spatial) error {
 		return errors.New("data is nil")
 	}
 
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
 	// Find the leaf node which contains data ID
 	leaf := t.findLeaf(data)
 
@@ -496,7 +509,7 @@ func (t *RTree) Delete(data Spatial) error {
 
 	// Reinsert the orphaned entries
 	for _, o := range orphans {
-		t.Insert(o.Data)
+		t.insertEntry(o.Data)
 	}
 
 	// Make the leaf the new root if it's the only one child
